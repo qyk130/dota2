@@ -26,7 +26,6 @@ players['hero_id'] = players['hero_id'].apply(lambda id: (id - 1) if id <= 24 el
 test_player['hero_id'] = test_player['hero_id'].apply(lambda id: (id - 1) if id <= 24 else (id - 2))
 #%%
 hero_count = 113
-total_count = (hero_count) * 2
 synergy = np.zeros((hero_count,hero_count,3))
 counter = np.zeros((hero_count,hero_count,3))
 hero_train = players['hero_id'].values.reshape(train_size,10)
@@ -62,57 +61,37 @@ for i in range(0, hero_count):
             synergy[i,j,2] = synergy[i,j,0]/synergy[i,j,1]
         
 #%%
-threshold_low = 0.6
+threshold_low = 0.65
 threshold_high = 0.8
 min_sup = 100
-x_train = np.zeros((train_size,total_count))
-x_test = np.zeros((test_size,total_count))
-train_synergy_feat = np.zeros((train_size,2*hero_count*hero_count),dtype=int)
-train_counter_feat = np.zeros((train_size,2*hero_count*hero_count),dtype=int)
-test_synergy_feat = np.zeros((test_size,2*hero_count*hero_count),dtype=int)
-test_counter_feat = np.zeros((test_size,2*hero_count*hero_count),dtype=int)
-def check_synergy(data,hero1,hero2,radiant):
-    if (hero1 > hero2):
-        hero1, hero2 = hero2, hero1
-    if (threshold_low<=synergy[hero1,hero2,2]) & (synergy[hero1,hero2,2]<=threshold_high) & (synergy[hero1,hero2,1] >= min_sup):
-        if radiant == 0:
-            data[i,hero1*hero_count + hero2] = 1
-        else:
-            data[i,hero_count * hero_count + hero1*hero_count + hero2] = 1
-def check_counter(data,hero1,hero2,radiant):
-    if (threshold_low<=counter[hero1,hero2,2]) & (counter[hero1,hero2,2]<=threshold_high) & (counter[hero1,hero2,1] >= min_sup):
-        if radiant == 0:
-            data[i,hero1*hero_count + hero2] = 1
-        else:
-            data[i,hero_count * hero_count + hero1*hero_count + hero2] = 1
-for i in range(0,train_size):
-    for j in range(0,10):
-        if j < 5:
-            x_train[i,hero_train[i,j]] = 1
-            for k in range(j+1,5): 
-                check_synergy(train_synergy_feat, hero_train[i,j], hero_train[i,k], 0)
-            for k in range(5,10):
-                check_counter(train_counter_feat, hero_train[i,j], hero_train[i,k], 0)
-        if j >=5:
-            x_train[i,hero_train[i,j] + hero_count] = 1
-            for k in range(j+1,10): 
-                check_synergy(train_synergy_feat, hero_train[i,j], hero_train[i,k], 1)
-            for k in range(0,5):
-                check_counter(train_counter_feat, hero_train[i,j], hero_train[i,k], 1)
-for i in range(0,test_size):
-    for j in range(0,10):
-        if j < 5:
-            x_test[i,hero_test[i,j]] = 1
-            for k in range(0,5): 
-                check_synergy(test_synergy_feat, hero_test[i,j], hero_test[i,k], 0)                   
-            for k in range(5,10):
-                check_counter(test_synergy_feat, hero_test[i,j], hero_test[i,k], 0)   
-        if j >=5:
-            x_test[i,hero_test[i,j] + hero_count] = 1
-            for k in range(5,10): 
-                check_synergy(test_synergy_feat, hero_test[i,j], hero_test[i,k], 0)  
-            for k in range(0,5):
-                check_counter(test_synergy_feat, hero_test[i,j], hero_test[i,k], 0) 
+synergy_selected = np.zeros((2),dtype=int)
+counter_selected = np.zeros((2),dtype=int)
+for i in range(0,hero_count):
+    for j in range(i+1,hero_count):
+        if (threshold_low<=synergy[i,j,2]<=threshold_high) & (synergy[i,j,1]>=100):
+            synergy_selected = np.vstack((synergy_selected,[i,j]))
+for i in range(0,hero_count):
+    for j in range(0,hero_count):
+        if (threshold_low<=counter[i,j,2]<=threshold_high) & (counter[i,j,1]>=100):
+            counter_selected = np.vstack((counter_selected,[i,j]))
+synergy_selected = np.delete(synergy_selected,0,0)
+counter_selected = np.delete(counter_selected,0,0)
+synergy_count = np.shape(synergy_selected)[0]
+counter_count = np.shape(counter_selected)[0]
+synergy_selected.sort()
+counter_selected.sort()
+total_count = 2*(hero_count+synergy_count+counter_count)
+x_train = np.zeros((train_size,total_count),dtype=int)
+x_test = np.zeros((test_size,total_count),dtype=int)
+#%%
+def fill_data(data,heroes):
+    data_size = np.shape(data)[0]
+    for i in range(0,data_size):
+        for j in range(0,5):
+            hero1 = heroes[i,j]
+            data[i,hero1] = 1
+            for k in range(j,5):
+                
 #%%
 from sklearn.neural_network import MLPClassifier
 from sklearn.linear_model import LogisticRegression
@@ -161,6 +140,8 @@ train_encoded = np.concatenate((train_encoded[0],train_encoded[1]), axis=1)
 test_encoded = np.vsplit(encoder.predict(test_vert),2)
 test_encoded = np.concatenate((test_encoded[0],test_encoded[1]), axis=1)
 #%%
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import make_scorer, accuracy_score
 logreg = LogisticRegression(max_iter = 200,)
 logreg.fit(x_train, train_labels)
 acc_scorer = make_scorer(accuracy_score)
